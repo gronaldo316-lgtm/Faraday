@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>EFF-EX | Control Logístico</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            navy: '#1E3A8A',
+            accent: '#7C3AED',
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="static/css/ui.css" />
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans min-h-screen flex flex-col pb-24 sm:pb-8">
+
+  <!-- HEADER -->
+  <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 px-4 py-3 shadow-sm">
+    <div class="max-w-3xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-600 to-blue-700 flex items-center justify-center shadow-sm">
+          <i class="fa-solid fa-barcode text-white text-lg"></i>
+        </div>
+        <div>
+          <h1 id="brand-logo-text" class="text-lg font-extrabold tracking-tight text-blue-950 leading-none">EFF-<span class="text-purple-600">EX</span></h1>
+          <div id="live-datetime-clock" class="text-[10px] font-mono font-bold text-slate-500 mt-1 flex items-center gap-1.5">
+            <i class="fa-regular fa-clock text-purple-600"></i>
+            <span>--/--/---- --:--:--</span>
+          </div>
+          <button type="button" id="sync-indicator" onclick="retrySync()" class="text-[9px] font-mono font-bold mt-0.5 text-slate-400">&#9679; Conectando...</button>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button id="theme-toggle-btn" onclick="toggleThemeMode()" title="Cambiar entre Modo Claro y Oscuro" class="px-2.5 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-mono font-bold flex items-center gap-1.5 transition">
+          <i id="theme-toggle-icon" class="fa-solid fa-moon text-purple-600"></i>
+          <span id="theme-toggle-label" class="hidden xs:inline">Oscuro</span>
+        </button>
+        <button type="button" id="global-cam-btn" title="Autorizar Cámara para toda la app" class="px-2.5 py-1.5 rounded-full bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-800 text-xs font-mono font-bold flex items-center gap-1.5 transition">
+          <i id="global-cam-icon" class="fa-solid fa-video"></i>
+          <span id="global-cam-label">Activar Cámara</span>
+        </button>
+        <div id="status-pill" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-mono font-bold">
+          <span id="status-dot" class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+          <span id="status-label">LISTO</span>
+        </div>
+        <button onclick="resetApp()" title="Reiniciar Demo" class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-600 transition">
+          <i class="fa-solid fa-rotate-left text-xs"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Desktop Top Nav -->
+    <nav class="hidden sm:grid grid-cols-8 gap-1 max-w-3xl mx-auto mt-3">
+      <button onclick="goTab('ordenes')" id="dtab-ordenes" class="dtab py-2.5 px-1 rounded-xl text-[10px] font-bold flex items-center justify-center gap-1 transition">
+        <i class="fa-solid fa-file-invoice"></i> 1. Check OC
+      </button>
+      <button onclick="goTab('anden')" id="dtab-anden" class="dtab py-2.5 px-1 rounded-xl text-[10px] font-bold flex items-center justify-center gap-1 transition">
+        <i class="fa-solid fa-barcode"></i> 2. Etiquetas
+      </button>
+      <button onclick="goTab('racks')" id="dtab-racks" class="dtab py-2.5 px-1 rounded-xl text-[10px] font-bold flex items-center justify-center gap-1 transition">
+        <i class="fa-solid fa-warehouse"></i> 3. Asig. Rack
+      </button>
+      <button onclick="goTab('surtido')" id="dtab-surtido" class="dtab py-2.5 px-1 rounded-xl text-[10px] font-bold flex items-center justify-center gap-1 transition">
+        <i class="fa-solid fa-truck-ramp-box"></i> 4. Despacho
+      </button>
+      <button onclick="goTab('operadores')" id="dtab-operadores" class="dtab py-2.5 px-1 rounded-xl text-[10px] font-bold flex items-center justify-center gap-1 transition">
+        <i class="fa-solid fa-truck"></i> 5. Unidades
+      </button>
+      <button onclick="goTab('estancia')" id="dtab-estancia" class="dtab py-2.5 px-1 rounded-xl text-[10px] font-bold flex items-center justify-center gap-1 transition">
+        <i class="fa-solid fa-dollar-sign"></i> 6. Estancia $
+      </button>
+      <button onclick="goTab('bitacora')" id="dtab-bitacora" class="dtab py-2.5 px-1 rounded-xl text-[10px] font-bold flex items-center justify-center gap-1 transition">
+        <i class="fa-solid fa-clipboard-list"></i> 7. Bitácora
+      </button>
+      <button onclick="goTab('nuevaoc')" id="dtab-nuevaoc" class="dtab py-2.5 px-1 rounded-xl text-[10px] font-bold flex items-center justify-center gap-1 transition">
+        <i class="fa-solid fa-plus"></i> 8. Nueva OC
+      </button>
+    </nav>
+  </header>
+
+  <!-- ALERTA INSTANTÁNEA POKA-YOKE -->
+  <div id="feedback-box" class="hidden max-w-3xl w-full mx-auto px-4 pt-3">
+    <div id="feedback-inner" class="rounded-2xl p-4 border-2 flex items-center justify-between gap-3 shadow-lg">
+      <div class="flex items-center gap-3">
+        <div id="feedback-icon" class="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 text-xl"></div>
+        <div>
+          <div id="feedback-title" class="font-extrabold text-sm sm:text-base uppercase tracking-wide"></div>
+          <div id="feedback-sub" class="text-xs font-medium mt-0.5"></div>
+        </div>
+      </div>
+      <button onclick="hideFeedback()" class="p-2 opacity-60 hover:opacity-100">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- MAIN VIEWS -->
+  <main class="flex-1 max-w-3xl w-full mx-auto px-4 py-4 space-y-4">
+
+    <!-- VISTA 1: CHECK OC -->
+    <section id="view-ordenes" class="view-panel space-y-4">
+      <div>
+        <h2 class="text-sm font-extrabold uppercase tracking-wider text-navy">1. Check OC</h2>
+        <p class="text-xs text-slate-500">Escanea el código de barras de la Orden de Compra física del operador.</p>
+      </div>
+
+      <button onclick="openCameraScanner('anden')" class="w-full py-5 px-4 rounded-2xl bg-purple-600 hover:bg-purple-700 active:scale-[0.99] text-white font-extrabold text-sm sm:text-base flex items-center justify-center gap-3 shadow-lg shadow-purple-600/25 transition">
+        <i class="fa-solid fa-camera text-xl"></i>
+        <span>ESCANEAR ORDEN DE COMPRA</span>
+      </button>
+
+      <div id="po-cards-list" class="space-y-3"></div>
+    </section>
+
+    <!-- VISTA 2: ETIQUETAS -->
+    <section id="view-anden" class="view-panel hidden space-y-4">
+      <div class="flex items-center justify-between gap-2">
+        <div>
+          <h2 id="generated-header-label" class="text-sm font-extrabold uppercase tracking-wider text-navy">Etiquetas Generadas (0)</h2>
+          <p class="text-xs text-slate-500">Imprime las etiquetas individuales de cada producto y pásalas a Asignación de Rack.</p>
+        </div>
+      </div>
+
+      <button id="next-step-racks-btn" onclick="goTab('racks')" class="hidden w-full py-4 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-extrabold flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 transition">
+        <span>SIGUIENTE PASO: ASIGNACIÓN DE RACK</span>
+        <i class="fa-solid fa-arrow-right"></i>
+      </button>
+
+      <div id="generated-lpns-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+    </section>
+
+    <!-- VISTA 3: ASIGNACIÓN DE RACK -->
+    <section id="view-racks" class="view-panel hidden space-y-4">
+      <div>
+        <h2 class="text-sm font-extrabold uppercase tracking-wider text-navy">3. Asignación de Rack</h2>
+        <p class="text-xs text-slate-500">Confirma la ubicación física escaneando la viga del rack asignado.</p>
+      </div>
+
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+          <div>
+            <label class="block text-[10px] font-mono font-bold uppercase text-slate-500 mb-1">Tarima Etiquetada</label>
+            <select id="forklift-lpn-select" onchange="selectForkliftLpn(this.value)" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 font-mono text-xs font-bold text-navy focus:outline-none focus:border-navy"></select>
+          </div>
+          <div class="bg-blue-950 text-white rounded-xl p-2.5 flex items-center justify-between">
+            <span class="text-[10px] font-mono uppercase text-blue-200">Rack Asignado:</span>
+            <span id="forklift-target-rack" class="font-mono text-lg font-extrabold text-emerald-400">---</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <button onclick="openCameraScanner('racks')" class="sm:col-span-2 py-3.5 px-4 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 shadow-md transition">
+            <i class="fa-solid fa-camera"></i>
+            <span>ESCANEAR RACK ASIGNADO</span>
+          </button>
+          <button onclick="simulateWrongRack()" class="py-3.5 px-3 rounded-xl bg-slate-100 hover:bg-red-50 text-slate-700 hover:text-red-700 border border-slate-200 text-xs font-bold flex items-center justify-center gap-1.5 transition">
+            <i class="fa-solid fa-triangle-exclamation text-red-500"></i> Simular Error
+          </button>
+        </div>
+
+        <button id="next-step-finish-racks-btn" onclick="finishRackStepAndReturn()" class="hidden w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-extrabold flex items-center justify-center gap-2 shadow-md transition">
+          <span>SIGUIENTE PASO: VOLVER A CHECK OC</span>
+          <i class="fa-solid fa-rotate-left"></i>
+        </button>
+      </div>
+
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-2.5">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-extrabold uppercase tracking-wider text-navy">Mapa de Racks (Solo Lectura)</span>
+          <div class="flex items-center gap-2 text-[10px] font-mono font-bold">
+            <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600">Libre</span>
+            <span class="px-2 py-0.5 rounded bg-amber-100 text-amber-800">Reservado</span>
+            <span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">Ocupado</span>
+          </div>
+        </div>
+        <div id="rack-map-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
+      </div>
+    </section>
+
+    <!-- VISTA 4: DESPACHO -->
+    <section id="view-surtido" class="view-panel hidden space-y-4">
+      <div class="flex items-center justify-between gap-2">
+        <div>
+          <h2 class="text-sm font-extrabold uppercase tracking-wider text-navy">4. Despacho a Andén de Embarque</h2>
+          <p class="text-xs text-slate-500">Escanea el Rack y el Producto para liberar ubicación y asignar unidad en ruta.</p>
+        </div>
+        <button onclick="simulateDuplicatePick()" class="px-3 py-2 rounded-xl bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 text-xs font-bold flex items-center gap-1.5 shrink-0 transition">
+          <i class="fa-solid fa-ban"></i> Simular Duplicado
+        </button>
+      </div>
+
+      <div id="outbound-dock-assignment-box" class="hidden bg-emerald-50 border-2 border-emerald-400 rounded-2xl p-4 space-y-3 shadow-sm">
+        <div class="flex items-start gap-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-lg shrink-0">
+            <i class="fa-solid fa-truck-ramp-box"></i>
+          </div>
+          <div>
+            <div id="outbound-dock-title" class="text-xs sm:text-sm font-extrabold text-emerald-950 uppercase">---</div>
+            <div id="outbound-dock-sub" class="text-xs font-semibold text-emerald-800 mt-0.5">---</div>
+          </div>
+        </div>
+        <div class="space-y-1.5">
+          <div class="text-[10px] font-mono font-bold uppercase text-emerald-900">Asigna Operador Disponible para Salida:</div>
+          <div id="outbound-operators-quick-list" class="grid grid-cols-1 sm:grid-cols-3 gap-2"></div>
+        </div>
+      </div>
+
+      <div id="picking-list" class="space-y-3"></div>
+    </section>
+
+    <!-- VISTA 5: UNIDADES -->
+    <section id="view-operadores" class="view-panel hidden space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-sm font-extrabold uppercase tracking-wider text-navy flex items-center gap-1.5">
+            <i class="fa-solid fa-truck text-purple-600"></i>
+            <span>5. Unidades — Control de Operadores y Tráilers (3 Unidades)</span>
+          </h2>
+          <p class="text-xs text-slate-500">Monitorea qué operador está en ruta y registra su regreso a base CEDIS para liberarlo.</p>
+        </div>
+      </div>
+
+      <div id="operators-fleet-list" class="space-y-3"></div>
+    </section>
+
+    <!-- VISTA 6: ESTANCIA -->
+    <section id="view-estancia" class="view-panel hidden space-y-4">
+      <div class="flex items-center justify-between gap-2">
+        <div>
+          <h2 class="text-sm font-extrabold uppercase tracking-wider text-navy">6. Estancia y Cobro Acumulado ($)</h2>
+          <p class="text-xs text-slate-500">Días de permanencia en almacén y tarifa acumulada por Orden de Compra.</p>
+        </div>
+        <button onclick="advanceOneStorageDay()" class="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition shrink-0">
+          <i class="fa-solid fa-forward-step"></i> Simular +1 Día
+        </button>
+      </div>
+
+      <div id="warehouse-billing-list" class="space-y-3"></div>
+    </section>
+
+    <!-- VISTA 7: BITÁCORA -->
+    <section id="view-bitacora" class="view-panel hidden space-y-5">
+      <div class="space-y-3">
+        <div>
+          <h2 class="text-sm font-extrabold uppercase tracking-wider text-navy">7. Bitácora de Órdenes de Compra</h2>
+          <p class="text-xs text-slate-500">Descarga el PDF oficial con código de barras Code-128 para entregar al operador.</p>
+        </div>
+
+        <div id="bitacora-po-list" class="space-y-3"></div>
+      </div>
+
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 space-y-3 shadow-sm">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-extrabold uppercase tracking-wider text-navy">Bitácora de Validaciones y Bloqueos</span>
+          <span class="text-[11px] font-mono font-bold px-2.5 py-1 rounded-full bg-red-50 text-red-700 border border-red-200">
+            Bloqueos: <strong id="kpi-blocked">0</strong>
+          </span>
+        </div>
+        <div id="compact-log" class="space-y-2 max-h-64 overflow-y-auto"></div>
+      </div>
+    </section>
+
+    <!-- VISTA 8: NUEVA OC -->
+    <section id="view-nuevaoc" class="view-panel hidden space-y-4">
+      <div>
+        <h2 class="text-sm font-extrabold uppercase tracking-wider text-navy flex items-center gap-1.5">
+          <i class="fa-solid fa-plus text-purple-600"></i>
+          <span>8. Nueva OC</span>
+        </h2>
+        <p class="text-xs text-slate-500">Genera una nueva Orden de Compra con folio automático, tarifa diaria y código de barras para el operador.</p>
+      </div>
+
+      <div class="bg-white border border-slate-200 rounded-3xl p-6 text-center space-y-4 shadow-sm">
+        <div class="w-14 h-14 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center mx-auto text-2xl">
+          <i class="fa-solid fa-plus"></i>
+        </div>
+        <div class="space-y-1 max-w-md mx-auto">
+          <h3 class="text-base font-extrabold text-navy">Alta de Orden de Compra y Cita de Arribo</h3>
+          <p class="text-xs text-slate-500">Registra los datos del cliente o proveedor, selecciona el andén de entrada (01 al 03) y define los productos autorizados.</p>
+        </div>
+        <button onclick="openNewPoModal()" class="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white text-sm font-extrabold inline-flex items-center justify-center gap-2 shadow-lg shadow-purple-600/25 transition">
+          <i class="fa-solid fa-plus"></i>
+          <span>Nueva OC</span>
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MOBILE BOTTOM NAV -->
+  <nav class="sm:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur border-t border-slate-200 px-1 py-1.5 grid grid-cols-8 gap-0.5 shadow-lg">
+    <button onclick="goTab('ordenes')" id="mtab-ordenes" class="mtab flex flex-col items-center justify-center py-1 rounded-xl text-[8px] font-bold gap-0.5 text-slate-500">
+      <i class="fa-solid fa-file-invoice text-xs"></i><span>1. OC</span>
+    </button>
+    <button onclick="goTab('anden')" id="mtab-anden" class="mtab flex flex-col items-center justify-center py-1 rounded-xl text-[8px] font-bold gap-0.5 text-slate-500">
+      <i class="fa-solid fa-barcode text-xs"></i><span>2. Etiq.</span>
+    </button>
+    <button onclick="goTab('racks')" id="mtab-racks" class="mtab flex flex-col items-center justify-center py-1 rounded-xl text-[8px] font-bold gap-0.5 text-slate-500">
+      <i class="fa-solid fa-warehouse text-xs"></i><span>3. Rack</span>
+    </button>
+    <button onclick="goTab('surtido')" id="mtab-surtido" class="mtab flex flex-col items-center justify-center py-1 rounded-xl text-[8px] font-bold gap-0.5 text-slate-500">
+      <i class="fa-solid fa-truck-ramp-box text-xs"></i><span>4. Desp.</span>
+    </button>
+    <button onclick="goTab('operadores')" id="mtab-operadores" class="mtab flex flex-col items-center justify-center py-1 rounded-xl text-[8px] font-bold gap-0.5 text-slate-500">
+      <i class="fa-solid fa-truck text-xs"></i><span>5. Unid.</span>
+    </button>
+    <button onclick="goTab('estancia')" id="mtab-estancia" class="mtab flex flex-col items-center justify-center py-1 rounded-xl text-[8px] font-bold gap-0.5 text-slate-500">
+      <i class="fa-solid fa-dollar-sign text-xs"></i><span>6. Est. $</span>
+    </button>
+    <button onclick="goTab('bitacora')" id="mtab-bitacora" class="mtab flex flex-col items-center justify-center py-1 rounded-xl text-[8px] font-bold gap-0.5 text-slate-500">
+      <i class="fa-solid fa-clipboard-list text-xs"></i><span>7. Bitác.</span>
+    </button>
+    <button onclick="goTab('nuevaoc')" id="mtab-nuevaoc" class="mtab flex flex-col items-center justify-center py-1 rounded-xl text-[8px] font-bold gap-0.5 text-slate-500">
+      <i class="fa-solid fa-plus text-xs"></i><span>8. Nueva OC</span>
+    </button>
+  </nav>
+
+  <!-- MODAL NUEVA OC -->
+  <div id="new-po-modal" class="hidden fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white border border-slate-200 rounded-3xl max-w-xl w-full p-5 sm:p-6 space-y-4 shadow-2xl max-h-[92vh] flex flex-col">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center">
+            <i class="fa-solid fa-file-circle-plus"></i>
+          </div>
+          <span class="text-xs font-mono font-extrabold text-navy uppercase">Registrar Nueva Orden de Compra</span>
+        </div>
+        <button type="button" onclick="closeNewPoModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="overflow-y-auto flex-1 space-y-3 pr-1">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <div>
+            <label class="block text-[10px] font-mono font-bold uppercase text-slate-500 mb-1">Folio Automático</label>
+            <input id="new-po-code" type="text" readonly tabindex="-1" class="w-full px-3 py-2 rounded-xl bg-slate-100 border border-slate-300 font-mono text-xs font-extrabold text-navy cursor-not-allowed" value="OC-504" />
+          </div>
+          <div>
+            <label class="block text-[10px] font-mono font-bold uppercase text-slate-500 mb-1">Factura / Remisión</label>
+            <input id="new-po-invoice" type="text" placeholder="Ej. FAC-9012" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-mono text-xs font-bold uppercase focus:outline-none focus:border-navy" />
+          </div>
+          <div>
+            <label class="block text-[10px] font-mono font-bold uppercase text-slate-500 mb-1">Fecha Programada</label>
+            <input id="new-po-date" type="date" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-mono text-xs font-bold focus:outline-none focus:border-navy" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <div>
+            <label class="block text-[10px] font-mono font-bold uppercase text-slate-500 mb-1">Razón Social Cliente / Proveedor</label>
+            <input id="new-po-supplier" type="text" placeholder="Ej. Comercializadora del Golfo S.A." class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs font-semibold focus:outline-none focus:border-navy" />
+          </div>
+          <div>
+            <label class="block text-[10px] font-mono font-bold uppercase text-slate-500 mb-1">RFC</label>
+            <input id="new-po-rfc" type="text" placeholder="Ej. CGO190514AB2" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-mono text-xs font-bold uppercase focus:outline-none focus:border-navy" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <div>
+            <label class="block text-[10px] font-mono font-bold uppercase text-slate-500 mb-1">Contacto / Operador</label>
+            <input id="new-po-contact" type="text" placeholder="Nombre del chofer" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs font-semibold focus:outline-none focus:border-navy" />
+          </div>
+          <div>
+            <label class="block text-[10px] font-mono font-bold uppercase text-slate-500 mb-1">Andén de Recepción (3 Entradas)</label>
+            <select id="new-po-dock" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-mono text-xs font-bold text-navy focus:outline-none focus:border-navy">
+              <option value="ANDÉN ENTRADA 01">ANDÉN ENTRADA 01</option>
+              <option value="ANDÉN ENTRADA 02">ANDÉN ENTRADA 02</option>
+              <option value="ANDÉN ENTRADA 03">ANDÉN ENTRADA 03</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-mono font-bold uppercase text-slate-500 mb-1">Tarifa por Día ($ MXN)</label>
+            <input id="new-po-rate" type="number" min="1" step="50" value="450" placeholder="Ej. 450" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-mono text-xs font-extrabold text-emerald-700 focus:outline-none focus:border-navy" />
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between pt-1">
+          <span class="text-[11px] font-mono font-bold uppercase text-navy">Productos del Embarque</span>
+          <button type="button" onclick="addProductRow()" class="px-3 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 text-xs font-bold flex items-center gap-1 transition">
+            <i class="fa-solid fa-plus"></i> Agregar Producto
+          </button>
+        </div>
+
+        <div id="new-po-products-container" class="space-y-2.5"></div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+        <button type="button" onclick="closeNewPoModal()" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold">
+          Cancelar
+        </button>
+        <button type="button" onclick="saveNewPO()" class="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-md shadow-purple-600/25">
+          <i class="fa-solid fa-check"></i> Guardar y Ver PDF
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL PDF OC -->
+  <div id="po-pdf-modal" class="hidden fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white border border-slate-200 rounded-3xl max-w-2xl w-full p-5 sm:p-6 space-y-4 shadow-2xl max-h-[92vh] flex flex-col">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-file-pdf text-red-600 text-lg"></i>
+          <span class="text-xs font-mono font-extrabold text-navy uppercase">Formato Oficial Orden de Compra (Para Cliente)</span>
+        </div>
+        <button onclick="closePoPdfModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div id="po-pdf-document" class="overflow-y-auto flex-1 bg-white border border-slate-300 rounded-2xl p-6 text-slate-900 space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b-2 border-navy pb-4">
+          <div>
+            <div class="text-xs font-mono font-bold text-purple-600 uppercase tracking-widest">EFF-EX LOGÍSTICA S.A. DE C.V.</div>
+            <h2 class="text-xl font-extrabold text-navy mt-0.5">ORDEN DE COMPRA / CITA DE ARRIBO</h2>
+            <p class="text-[11px] text-slate-500 mt-1">Av. Industrial Puerto Veracruz Km 4.5 &bull; RFC: EFX190822MX1</p>
+          </div>
+          <div class="text-center bg-slate-50 border border-slate-300 rounded-xl p-2.5 min-w-[190px]">
+            <div class="text-[10px] font-mono font-bold text-slate-500">CÓDIGO DE ESCANEO EN ANDÉN</div>
+            <div id="pdf-po-svg" class="my-1 bg-white p-1.5 rounded"></div>
+            <div id="pdf-po-code" class="font-mono text-base font-extrabold text-navy tracking-widest">OC-501</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div class="bg-slate-50 rounded-xl p-3 border border-slate-200 space-y-1">
+            <div class="text-[10px] font-mono font-bold text-slate-400 uppercase">Datos del Cliente / Proveedor</div>
+            <div><strong class="text-slate-600">Razón Social:</strong> <span id="pdf-po-supplier" class="font-bold text-slate-900">---</span></div>
+            <div><strong class="text-slate-600">RFC:</strong> <span id="pdf-po-rfc" class="font-mono font-bold text-slate-900">---</span></div>
+            <div><strong class="text-slate-600">Contacto:</strong> <span id="pdf-po-contact" class="text-slate-800">---</span></div>
+          </div>
+          <div class="bg-slate-50 rounded-xl p-3 border border-slate-200 space-y-1">
+            <div class="text-[10px] font-mono font-bold text-slate-400 uppercase">Control de Recepción CEDIS</div>
+            <div><strong class="text-slate-600">Factura / Remisión:</strong> <span id="pdf-po-invoice" class="font-mono font-bold text-navy">---</span></div>
+            <div><strong class="text-slate-600">Fecha Programada:</strong> <span id="pdf-po-date" class="font-mono font-bold text-slate-900">---</span></div>
+            <div><strong class="text-slate-600">Andén Asignado:</strong> <span id="pdf-po-dock" class="font-mono font-bold text-accent">---</span></div>
+            <div><strong class="text-slate-600">Tarifa Pactada:</strong> <span id="pdf-po-rate" class="font-mono font-extrabold text-emerald-700">---</span></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="text-[10px] font-mono font-bold text-navy uppercase mb-1.5">Detalle de Mercancía Autorizada</div>
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-navy text-white font-mono text-[10px]">
+                <th class="py-2 px-3 rounded-tl-lg">#</th>
+                <th class="py-2 px-3">SKU</th>
+                <th class="py-2 px-3">Descripción del Producto</th>
+                <th class="py-2 px-3 rounded-tr-lg text-right">Cantidad</th>
+              </tr>
+            </thead>
+            <tbody id="pdf-po-tbody" class="divide-y divide-slate-200 border border-slate-200"></tbody>
+          </table>
+        </div>
+
+        <div class="bg-amber-50 border border-amber-300 rounded-xl p-3 text-[11px] text-amber-950 flex items-start gap-2.5">
+          <i class="fa-solid fa-circle-info text-amber-600 mt-0.5"></i>
+          <div>
+            <strong>INSTRUCCIÓN OBLIGATORIA:</strong> El operador del transporte debe presentar este documento impreso o digital al llegar al andén asignado para su lectura óptica en <strong>1. Check OC</strong>.
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+        <button onclick="closePoPdfModal()" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold">
+          Cerrar
+        </button>
+        <button onclick="downloadPoPdf()" class="px-5 py-2.5 rounded-xl bg-navy hover:bg-blue-900 text-white text-xs font-extrabold flex items-center gap-2 shadow-md">
+          <i class="fa-solid fa-file-arrow-down"></i> Descargar Archivo PDF
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CÁMARA -->
+  <div id="camera-modal" class="hidden fixed inset-0 z-50 bg-slate-950/95 flex flex-col justify-between p-4">
+    <div class="flex items-center justify-between max-w-lg w-full mx-auto">
+      <span id="cam-mode-label" class="text-xs font-mono font-bold uppercase px-3 py-1 rounded-full bg-accent text-white">ESCÁNER CÁMARA</span>
+      <button onclick="closeCameraScanner()" class="w-10 h-10 rounded-full bg-white/15 text-white flex items-center justify-center">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+    </div>
+
+    <div class="relative max-w-lg w-full mx-auto aspect-[4/3] bg-slate-900 rounded-3xl overflow-hidden border-2 border-white/25 flex items-center justify-center">
+      <video id="camera-video" autoplay playsinline webkit-playsinline muted class="fixed -top-[9999px] -left-[9999px] w-px h-px opacity-0 pointer-events-none"></video>
+      <canvas id="camera-canvas" class="w-full h-full object-cover pointer-events-none"></canvas>
+
+      <div id="camera-fallback-msg" class="hidden absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-slate-900">
+        <i class="fa-solid fa-video-slash text-3xl text-slate-400 mb-2"></i>
+        <p class="text-xs text-white font-semibold">Cámara no disponible en este navegador.</p>
+        <p class="text-[11px] text-slate-300 mt-1">Usa los botones inferiores para simular lectura óptica.</p>
+      </div>
+
+      <div class="pointer-events-none absolute inset-6 border-2 border-accent rounded-2xl">
+        <div class="laser-line absolute inset-x-2 h-0.5 bg-red-500 shadow-[0_0_12px_#ef4444]"></div>
+      </div>
+    </div>
+
+    <div class="max-w-lg w-full mx-auto space-y-2">
+      <div class="text-center text-[11px] font-mono text-slate-300">Apunta al código de barras o simula lectura:</div>
+      <div id="cam-quick-buttons" class="grid grid-cols-3 gap-2"></div>
+    </div>
+  </div>
+
+  <!-- MODAL ETIQUETA LPN -->
+  <div id="print-modal" class="hidden fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white border border-slate-200 rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-mono font-bold text-navy">ETIQUETA TÉRMICA 4x2"</span>
+        <button onclick="closePrintModal()" class="text-slate-400 hover:text-slate-700"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <div id="print-modal-card" class="bg-white text-slate-950 rounded-2xl p-5 border-2 border-dashed border-slate-400 text-center space-y-2">
+        <div class="flex justify-between text-[10px] font-mono font-bold border-b border-slate-300 pb-1">
+          <span>EFF-EX</span>
+          <span id="pm-oc">OC-501</span>
+        </div>
+        <div id="pm-prod" class="text-base font-extrabold pt-1">Sillas Ergonómicas</div>
+        <div class="inline-block px-3 py-1 rounded-lg bg-navy text-white font-mono text-sm font-extrabold">
+          RACK: <span id="pm-rack">B-01</span>
+        </div>
+        <div id="pm-svg" class="pt-2"></div>
+        <div id="pm-code" class="font-mono text-xl font-extrabold tracking-widest">P-501-01</div>
+      </div>
+
+      <button onclick="confirmPrintAndPutaway()" class="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md">
+        <i class="fa-solid fa-print"></i> Mandar a Impresora
+      </button>
+    </div>
+  </div>
+
+  <script src="static/js/config.js"></script>
+  <script src="static/js/supabase.js"></script>
+  <script src="static/js/app.js"></script>
+</body>
+</html>
